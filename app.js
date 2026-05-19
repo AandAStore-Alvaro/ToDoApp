@@ -766,6 +766,28 @@ function closeModal(id) {
 }
 
 // ============================================================
+// MOBILE MENU
+// ============================================================
+function toggleMobileMenu() {
+  const sidebar = $('sidebar');
+  const overlay = $('sidebar-overlay');
+  const isOpen  = sidebar.classList.contains('open');
+  if (isOpen) {
+    closeMobileMenu();
+  } else {
+    sidebar.classList.add('open');
+    overlay.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+  }
+}
+
+function closeMobileMenu() {
+  $('sidebar').classList.remove('open');
+  $('sidebar-overlay').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+
+// ============================================================
 // VIEW SWITCHING
 // ============================================================
 function showView(view) {
@@ -947,6 +969,18 @@ document.addEventListener('DOMContentLoaded', () => {
       ['task-modal','meeting-modal'].forEach(id => {
         if (!$(id).classList.contains('hidden')) closeModal(id);
       });
+      closeMobileMenu();
     }
+  });
+
+  // Hamburger menu
+  $('hamburger-btn').addEventListener('click', toggleMobileMenu);
+  $('sidebar-overlay').addEventListener('click', closeMobileMenu);
+
+  // Cerrar menú al navegar en móvil
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.innerWidth <= 768) closeMobileMenu();
+    });
   });
 });

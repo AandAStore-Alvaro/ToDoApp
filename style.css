@@ -1004,6 +1004,55 @@ label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
 .mini-meeting-time { font-size: 11.5px; color: var(--gray-400); }
 
 /* =========================================
+   MOBILE HEADER
+   ========================================= */
+#mobile-header {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  height: 54px;
+  background: var(--sidebar-bg);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  flex-shrink: 0;
+}
+
+#hamburger-btn {
+  color: white;
+  padding: 8px;
+  border-radius: var(--radius);
+  transition: var(--transition);
+}
+
+#hamburger-btn:hover { background: var(--sidebar-hover); }
+
+.mobile-logo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+}
+
+.mobile-logo svg { color: var(--primary-mid); }
+
+/* Overlay oscuro detrás del menú */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 60;
+  backdrop-filter: blur(2px);
+}
+
+#sidebar-overlay.visible { display: block; }
+
+/* =========================================
    RESPONSIVE
    ========================================= */
 @media (max-width: 1024px) {
@@ -1013,9 +1062,46 @@ label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
 }
 
 @media (max-width: 768px) {
-  :root { --sidebar-width: 0px; }
-  #sidebar { display: none; }
+  /* Layout cambia a columna para que el header quede arriba */
+  #main-app {
+    flex-direction: column;
+  }
+
+  /* Header móvil visible */
+  #mobile-header { display: flex; }
+
+  /* Sidebar se convierte en drawer lateral */
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+    z-index: 70;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: var(--shadow-lg);
+  }
+
+  #sidebar.open { transform: translateX(0); }
+
+  /* Contenido ocupa todo el ancho */
+  #content { width: 100%; }
+
   .view { padding: 16px; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .view-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .filter-bar { flex-wrap: wrap; }
+  .filter-bar select { flex: 1; min-width: 130px; }
+
+  .calendar-layout { grid-template-columns: 1fr; }
+
+  .modal { max-height: 92vh; }
 }
