@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Perfiles de usuario: cualquier miembro autenticado puede leer,
+    // solo el propio usuario puede escribir su perfil.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+
+      // Tareas personales: solo el propietario puede leer y escribir.
+      match /personalTasks/{taskId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Tareas grupales: cualquier miembro autenticado puede crear, leer,
+    // actualizar y eliminar.
+    match /groupTasks/{taskId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Reuniones: visibles y editables por todo el equipo autenticado.
+    match /meetings/{meetingId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
