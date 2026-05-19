@@ -768,23 +768,20 @@ function closeModal(id) {
 // ============================================================
 // MOBILE MENU
 // ============================================================
-function toggleMobileMenu() {
-  const sidebar = $('sidebar');
-  const overlay = $('sidebar-overlay');
-  const isOpen  = sidebar.classList.contains('open');
-  if (isOpen) {
-    closeMobileMenu();
-  } else {
-    sidebar.classList.add('open');
-    overlay.classList.add('visible');
-    document.body.style.overflow = 'hidden';
-  }
+function openMobileMenu() {
+  $('sidebar').classList.add('open');
+  $('sidebar-overlay').classList.add('visible');
+  document.body.style.overflow = 'hidden';
 }
 
 function closeMobileMenu() {
   $('sidebar').classList.remove('open');
   $('sidebar-overlay').classList.remove('visible');
   document.body.style.overflow = '';
+}
+
+function toggleMobileMenu() {
+  $('sidebar').classList.contains('open') ? closeMobileMenu() : openMobileMenu();
 }
 
 // ============================================================
