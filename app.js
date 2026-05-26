@@ -242,11 +242,22 @@ async function deleteGroupTask(id) {
 // PERSONAL TASKS CRUD
 // ============================================================
 async function addPersonalTask(data) {
+  const maxOrder = state.personalTasks.reduce((max, t) => Math.max(max, t.order ?? -1), -1);
   await db.collection('users').doc(state.user.uid)
     .collection('personalTasks').add({
       ...data,
+      order: maxOrder + 1,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
+}
+
+async function updatePersonalTasksOrder(orderedIds) {
+  const batch = db.batch();
+  const ref = db.collection('users').doc(state.user.uid).collection('personalTasks');
+  orderedIds.forEach((id, index) => {
+    batch.update(ref.doc(id), { order: index });
+  });
+  await batch.commit();
 }
 
 async function updatePersonalTask(id, data) {
@@ -329,7 +340,7 @@ function taskCardHTML(task, type, index = 0, total = 1) {
 
   return `
     <div class="task-card priority-${task.priority} status-${task.status}"
-         data-id="${task.id}" data-type="${type}" draggable="${type === 'group'}">
+         data-id="${task.id}" data-type="${type}" draggable="true">
       ${dragHandle}
       <div class="task-main">
         <div class="task-title">${escapeHtml(task.title)}</div>
@@ -394,9 +405,20 @@ function renderGroupTasks() {
 // ============================================================
 // RENDER — PERSONAL TASKS
 // ============================================================
+let sortedPersonalIds = [];
+
 function renderPersonalTasks() {
   const { status, priority } = state.filters.personal;
-  let tasks = state.personalTasks;
+  const filtersActive = !!(status || priority);
+
+  let tasks = [...state.personalTasks].sort((a, b) => {
+    const oa = a.order !== undefined ? a.order : 999999;
+    const ob = b.order !== undefined ? b.order : 999999;
+    return oa - ob;
+  });
+
+  sortedPersonalIds = tasks.map(t => t.id);
+
   if (status)   tasks = tasks.filter(t => t.status === status);
   if (priority) tasks = tasks.filter(t => t.priority === priority);
 
@@ -405,8 +427,12 @@ function renderPersonalTasks() {
     container.innerHTML = emptyState('✅', 'No tienes tareas personales.', 'Solo tú puedes ver tus tareas personales.');
     return;
   }
-  container.innerHTML = tasks.map(t => taskCardHTML(t, 'personal')).join('');
-  bindTaskCardEvents(container);
+  container.innerHTML = tasks.map((t, i) => taskCardHTML(t, 'personal', i, tasks.length)).join('');
+
+  if (!filtersActive) {
+    initPersonalDragDrop(container, tasks);
+  }
+  bindTaskCardEvents(container, tasks);
 }
 
 function bindTaskCardEvents(container, sortedTasks = []) {
@@ -423,16 +449,20 @@ function bindTaskCardEvents(container, sortedTasks = []) {
     });
   });
 
+  // Detectar tipo desde la primera tarjeta del contenedor
+  const isGroup = container.querySelector('.task-card')?.dataset.type === 'group';
+  const getSortedIds  = () => isGroup ? [...sortedGroupIds]  : [...sortedPersonalIds];
+  const saveOrder     = ids => isGroup ? updateGroupTasksOrder(ids) : updatePersonalTasksOrder(ids);
+
   // Botón ↑ subir
   container.querySelectorAll('.move-up-btn:not([disabled])').forEach(btn => {
     btn.addEventListener('click', async e => {
       e.stopPropagation();
-      const id  = btn.dataset.id;
-      const ids = [...sortedGroupIds];
-      const idx = ids.indexOf(id);
+      const ids = getSortedIds();
+      const idx = ids.indexOf(btn.dataset.id);
       if (idx <= 0) return;
       [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
-      await updateGroupTasksOrder(ids);
+      await saveOrder(ids);
     });
   });
 
@@ -440,12 +470,11 @@ function bindTaskCardEvents(container, sortedTasks = []) {
   container.querySelectorAll('.move-down-btn:not([disabled])').forEach(btn => {
     btn.addEventListener('click', async e => {
       e.stopPropagation();
-      const id  = btn.dataset.id;
-      const ids = [...sortedGroupIds];
-      const idx = ids.indexOf(id);
+      const ids = getSortedIds();
+      const idx = ids.indexOf(btn.dataset.id);
       if (idx >= ids.length - 1) return;
       [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
-      await updateGroupTasksOrder(ids);
+      await saveOrder(ids);
     });
   });
 }
@@ -507,6 +536,61 @@ function initGroupDragDrop(container, tasks) {
 
       dragSrcId = null;
       await updateGroupTasksOrder(ids);
+    });
+  });
+}
+
+function initPersonalDragDrop(container, tasks) {
+  const cards = container.querySelectorAll('.task-card[draggable="true"]');
+
+  cards.forEach(card => {
+    card.addEventListener('dragstart', e => {
+      dragSrcId = card.dataset.id;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => card.classList.add('dragging'), 0);
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      container.querySelectorAll('.task-card').forEach(c => {
+        c.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+    });
+
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isTop = e.clientY < rect.top + rect.height / 2;
+      container.querySelectorAll('.task-card').forEach(c => {
+        c.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+      card.classList.add(isTop ? 'drag-over-top' : 'drag-over-bottom');
+    });
+
+    card.addEventListener('dragleave', e => {
+      if (!card.contains(e.relatedTarget)) {
+        card.classList.remove('drag-over-top', 'drag-over-bottom');
+      }
+    });
+
+    card.addEventListener('drop', async e => {
+      e.preventDefault();
+      card.classList.remove('drag-over-top', 'drag-over-bottom');
+      const targetId = card.dataset.id;
+      if (!dragSrcId || dragSrcId === targetId) return;
+
+      const rect = card.getBoundingClientRect();
+      const insertBefore = e.clientY < rect.top + rect.height / 2;
+
+      const ids = [...sortedPersonalIds];
+      const srcIdx = ids.indexOf(dragSrcId);
+      ids.splice(srcIdx, 1);
+      const tgtIdx = ids.indexOf(targetId);
+      ids.splice(insertBefore ? tgtIdx : tgtIdx + 1, 0, dragSrcId);
+
+      dragSrcId = null;
+      await updatePersonalTasksOrder(ids);
     });
   });
 }
