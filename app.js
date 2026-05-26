@@ -316,8 +316,8 @@ function taskCardHTML(task, type, index = 0, total = 1) {
     ? `<span class="task-meta-item">por ${getUserName(task.createdBy)}</span>`
     : '';
 
-  // Drag handle + número de orden (solo tareas grupales)
-  const dragHandle = type === 'group' ? `
+  // Drag handle + número de orden (ambos tipos)
+  const dragHandle = `
     <div class="drag-handle" title="Arrastra para reordenar">
       <span class="order-num">${index + 1}</span>
       <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" class="grip-icon">
@@ -325,10 +325,10 @@ function taskCardHTML(task, type, index = 0, total = 1) {
         <circle cx="9"  cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
         <circle cx="9"  cy="20" r="1.5"/><circle cx="15" cy="20" r="1.5"/>
       </svg>
-    </div>` : '';
+    </div>`;
 
-  // Botones subir/bajar (solo tareas grupales)
-  const orderBtns = type === 'group' ? `
+  // Botones subir/bajar (ambos tipos)
+  const orderBtns = `
     <div class="order-btns">
       <button class="order-btn move-up-btn" data-id="${task.id}" title="Subir" ${index === 0 ? 'disabled' : ''}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="18 15 12 9 6 15"/></svg>
@@ -336,7 +336,7 @@ function taskCardHTML(task, type, index = 0, total = 1) {
       <button class="order-btn move-down-btn" data-id="${task.id}" title="Bajar" ${index === total - 1 ? 'disabled' : ''}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
-    </div>` : '';
+    </div>`;
 
   return `
     <div class="task-card priority-${task.priority} status-${task.status}"
@@ -399,7 +399,7 @@ function renderGroupTasks() {
   if (!filtersActive) {
     initGroupDragDrop(container, tasks);
   }
-  bindTaskCardEvents(container, tasks);
+  bindTaskCardEvents(container, tasks, 'group');
 }
 
 // ============================================================
@@ -432,27 +432,26 @@ function renderPersonalTasks() {
   if (!filtersActive) {
     initPersonalDragDrop(container, tasks);
   }
-  bindTaskCardEvents(container, tasks);
+  bindTaskCardEvents(container, tasks, 'personal');
 }
 
-function bindTaskCardEvents(container, sortedTasks = []) {
+function bindTaskCardEvents(container, sortedTasks = [], type = null) {
   // Editar
   container.querySelectorAll('.edit-task-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      const id   = btn.dataset.id;
-      const type = btn.dataset.type;
-      const task = type === 'group'
+      const id       = btn.dataset.id;
+      const taskType = btn.dataset.type;
+      const task     = taskType === 'group'
         ? state.groupTasks.find(t => t.id === id)
         : state.personalTasks.find(t => t.id === id);
-      openTaskModal(type, task);
+      openTaskModal(taskType, task);
     });
   });
 
-  // Detectar tipo desde la primera tarjeta del contenedor
-  const isGroup = container.querySelector('.task-card')?.dataset.type === 'group';
-  const getSortedIds  = () => isGroup ? [...sortedGroupIds]  : [...sortedPersonalIds];
-  const saveOrder     = ids => isGroup ? updateGroupTasksOrder(ids) : updatePersonalTasksOrder(ids);
+  const isGroup      = type === 'group';
+  const getSortedIds = () => isGroup ? [...sortedGroupIds] : [...sortedPersonalIds];
+  const saveOrder    = ids => isGroup ? updateGroupTasksOrder(ids) : updatePersonalTasksOrder(ids);
 
   // Botón ↑ subir
   container.querySelectorAll('.move-up-btn:not([disabled])').forEach(btn => {
