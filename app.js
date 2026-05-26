@@ -213,11 +213,21 @@ function teardownListeners() {
 // GROUP TASKS CRUD
 // ============================================================
 async function addGroupTask(data) {
+  const maxOrder = state.groupTasks.reduce((max, t) => Math.max(max, t.order ?? -1), -1);
   await db.collection('groupTasks').add({
     ...data,
+    order: maxOrder + 1,
     createdBy: state.user.uid,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
+}
+
+async function updateGroupTasksOrder(orderedIds) {
+  const batch = db.batch();
+  orderedIds.forEach((id, index) => {
+    batch.update(db.collection('groupTasks').doc(id), { order: index });
+  });
+  await batch.commit();
 }
 
 async function updateGroupTask(id, data) {
@@ -271,7 +281,7 @@ async function deleteMeeting(id) {
 // ============================================================
 // RENDER — TASK CARD
 // ============================================================
-function taskCardHTML(task, type) {
+function taskCardHTML(task, type, index = 0, total = 1) {
   const overdue = task.status !== 'done' && isOverdue(task.dueDate);
   const assignees = type === 'group' && task.assignees?.length
     ? task.assignees.map(uid => getUserName(uid)).filter(Boolean)
@@ -295,9 +305,32 @@ function taskCardHTML(task, type) {
     ? `<span class="task-meta-item">por ${getUserName(task.createdBy)}</span>`
     : '';
 
+  // Drag handle + número de orden (solo tareas grupales)
+  const dragHandle = type === 'group' ? `
+    <div class="drag-handle" title="Arrastra para reordenar">
+      <span class="order-num">${index + 1}</span>
+      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" class="grip-icon">
+        <circle cx="9"  cy="4"  r="1.5"/><circle cx="15" cy="4"  r="1.5"/>
+        <circle cx="9"  cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+        <circle cx="9"  cy="20" r="1.5"/><circle cx="15" cy="20" r="1.5"/>
+      </svg>
+    </div>` : '';
+
+  // Botones subir/bajar (solo tareas grupales)
+  const orderBtns = type === 'group' ? `
+    <div class="order-btns">
+      <button class="order-btn move-up-btn" data-id="${task.id}" title="Subir" ${index === 0 ? 'disabled' : ''}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+      <button class="order-btn move-down-btn" data-id="${task.id}" title="Bajar" ${index === total - 1 ? 'disabled' : ''}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>` : '';
+
   return `
     <div class="task-card priority-${task.priority} status-${task.status}"
-         data-id="${task.id}" data-type="${type}">
+         data-id="${task.id}" data-type="${type}" draggable="${type === 'group'}">
+      ${dragHandle}
       <div class="task-main">
         <div class="task-title">${escapeHtml(task.title)}</div>
         ${task.desc ? `<div class="task-desc">${escapeHtml(task.desc)}</div>` : ''}
@@ -310,6 +343,7 @@ function taskCardHTML(task, type) {
         </div>
       </div>
       <div class="task-actions">
+        ${orderBtns}
         <button class="action-btn edit-task-btn" data-id="${task.id}" data-type="${type}" title="Editar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
@@ -323,19 +357,38 @@ function taskCardHTML(task, type) {
 // ============================================================
 // RENDER — GROUP TASKS
 // ============================================================
+let sortedGroupIds = []; // orden actual para drag & drop
+
 function renderGroupTasks() {
   const { status, priority } = state.filters.group;
-  let tasks = state.groupTasks;
+  const filtersActive = !!(status || priority);
+
+  // Ordenar por campo "order", sin orden asignado van al final
+  let tasks = [...state.groupTasks].sort((a, b) => {
+    const oa = a.order !== undefined ? a.order : 999999;
+    const ob = b.order !== undefined ? b.order : 999999;
+    return oa - ob;
+  });
+
+  // Guardar IDs ordenados (sin filtros, para drag & drop sobre lista completa)
+  sortedGroupIds = tasks.map(t => t.id);
+
   if (status)   tasks = tasks.filter(t => t.status === status);
   if (priority) tasks = tasks.filter(t => t.priority === priority);
 
   const container = $('group-tasks-list');
+
   if (!tasks.length) {
     container.innerHTML = emptyState('👥', 'No hay tareas grupales.', 'Crea una para que todo el equipo pueda verla.');
     return;
   }
-  container.innerHTML = tasks.map(t => taskCardHTML(t, 'group')).join('');
-  bindTaskCardEvents(container);
+
+  container.innerHTML = tasks.map((t, i) => taskCardHTML(t, 'group', i, tasks.length)).join('');
+
+  if (!filtersActive) {
+    initGroupDragDrop(container, tasks);
+  }
+  bindTaskCardEvents(container, tasks);
 }
 
 // ============================================================
@@ -356,7 +409,8 @@ function renderPersonalTasks() {
   bindTaskCardEvents(container);
 }
 
-function bindTaskCardEvents(container) {
+function bindTaskCardEvents(container, sortedTasks = []) {
+  // Editar
   container.querySelectorAll('.edit-task-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -366,6 +420,93 @@ function bindTaskCardEvents(container) {
         ? state.groupTasks.find(t => t.id === id)
         : state.personalTasks.find(t => t.id === id);
       openTaskModal(type, task);
+    });
+  });
+
+  // Botón ↑ subir
+  container.querySelectorAll('.move-up-btn:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id  = btn.dataset.id;
+      const ids = [...sortedGroupIds];
+      const idx = ids.indexOf(id);
+      if (idx <= 0) return;
+      [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+      await updateGroupTasksOrder(ids);
+    });
+  });
+
+  // Botón ↓ bajar
+  container.querySelectorAll('.move-down-btn:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id  = btn.dataset.id;
+      const ids = [...sortedGroupIds];
+      const idx = ids.indexOf(id);
+      if (idx >= ids.length - 1) return;
+      [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+      await updateGroupTasksOrder(ids);
+    });
+  });
+}
+
+// ============================================================
+// DRAG & DROP — GROUP TASKS
+// ============================================================
+let dragSrcId = null;
+
+function initGroupDragDrop(container, tasks) {
+  const cards = container.querySelectorAll('.task-card[draggable="true"]');
+
+  cards.forEach(card => {
+    // Desktop drag
+    card.addEventListener('dragstart', e => {
+      dragSrcId = card.dataset.id;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => card.classList.add('dragging'), 0);
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      container.querySelectorAll('.task-card').forEach(c => {
+        c.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+    });
+
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isTop = e.clientY < rect.top + rect.height / 2;
+      container.querySelectorAll('.task-card').forEach(c => {
+        c.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+      card.classList.add(isTop ? 'drag-over-top' : 'drag-over-bottom');
+    });
+
+    card.addEventListener('dragleave', e => {
+      if (!card.contains(e.relatedTarget)) {
+        card.classList.remove('drag-over-top', 'drag-over-bottom');
+      }
+    });
+
+    card.addEventListener('drop', async e => {
+      e.preventDefault();
+      card.classList.remove('drag-over-top', 'drag-over-bottom');
+      const targetId = card.dataset.id;
+      if (!dragSrcId || dragSrcId === targetId) return;
+
+      const rect = card.getBoundingClientRect();
+      const insertBefore = e.clientY < rect.top + rect.height / 2;
+
+      const ids = [...sortedGroupIds];
+      const srcIdx = ids.indexOf(dragSrcId);
+      ids.splice(srcIdx, 1);
+      const tgtIdx = ids.indexOf(targetId);
+      ids.splice(insertBefore ? tgtIdx : tgtIdx + 1, 0, dragSrcId);
+
+      dragSrcId = null;
+      await updateGroupTasksOrder(ids);
     });
   });
 }

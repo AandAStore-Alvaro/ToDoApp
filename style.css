@@ -464,6 +464,83 @@ label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
   align-items: flex-start;
 }
 
+/* =========================================
+   DRAG HANDLE & ORDER
+   ========================================= */
+.drag-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  cursor: grab;
+  flex-shrink: 0;
+  color: var(--gray-300);
+  transition: var(--transition);
+  user-select: none;
+}
+
+.drag-handle:hover { color: var(--gray-500); }
+.drag-handle:active { cursor: grabbing; }
+
+.order-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-400);
+  line-height: 1;
+  min-width: 14px;
+  text-align: center;
+}
+
+.grip-icon { opacity: 0.5; }
+.drag-handle:hover .grip-icon { opacity: 1; }
+
+/* Estados drag & drop */
+.task-card.dragging {
+  opacity: 0.45;
+  box-shadow: var(--shadow-lg);
+  transform: scale(1.01);
+}
+
+.task-card.drag-over-top {
+  border-top: 2px solid var(--primary);
+  margin-top: -2px;
+}
+
+.task-card.drag-over-bottom {
+  border-bottom: 2px solid var(--primary);
+  margin-bottom: -2px;
+}
+
+/* Botones de orden ↑↓ */
+.order-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: 2px;
+}
+
+.order-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: var(--gray-400);
+  transition: var(--transition);
+}
+
+.order-btn:not([disabled]):hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.order-btn[disabled] {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
 .action-btn {
   padding: 5px;
   border-radius: 6px;
