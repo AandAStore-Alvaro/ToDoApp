@@ -51,6 +51,7 @@ let unsubGroupTasks    = null;
 let unsubPersonalTasks = null;
 let unsubMeetings      = null;
 
+
 // ============================================================
 // UTILS
 // ============================================================
@@ -214,12 +215,13 @@ function teardownListeners() {
 // ============================================================
 async function addGroupTask(data) {
   const maxOrder = state.groupTasks.reduce((max, t) => Math.max(max, t.order ?? -1), -1);
-  await db.collection('groupTasks').add({
+  const ref = await db.collection('groupTasks').add({
     ...data,
     order: maxOrder + 1,
     createdBy: state.user.uid,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
+  return ref.id;
 }
 
 async function updateGroupTasksOrder(orderedIds) {
@@ -243,12 +245,13 @@ async function deleteGroupTask(id) {
 // ============================================================
 async function addPersonalTask(data) {
   const maxOrder = state.personalTasks.reduce((max, t) => Math.max(max, t.order ?? -1), -1);
-  await db.collection('users').doc(state.user.uid)
+  const ref = await db.collection('users').doc(state.user.uid)
     .collection('personalTasks').add({
       ...data,
       order: maxOrder + 1,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
+  return ref.id;
 }
 
 async function updatePersonalTasksOrder(orderedIds) {
@@ -865,9 +868,9 @@ function renderAssigneesCheckboxes(selectedUids) {
 }
 
 async function saveTask() {
-  const title    = $('task-title').value.trim();
-  const type     = $('task-type').value;
-  const id       = $('task-id').value;
+  const title = $('task-title').value.trim();
+  const type  = $('task-type').value;
+  const id    = $('task-id').value;
 
   if (!title) { toast('El título es obligatorio.', 'error'); return; }
 

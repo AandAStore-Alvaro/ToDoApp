@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Adjuntos de tareas grupales: cualquier usuario autenticado puede leer y escribir
+    match /attachments/group/{taskId}/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Adjuntos de tareas personales: solo el propietario
+    match /attachments/personal/{userId}/{taskId}/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
